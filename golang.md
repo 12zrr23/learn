@@ -138,6 +138,13 @@ m[fmt.Sprintf("key%d", id)] = id
 - 如果 dirty 结构不存在，则创建一个新的 dirty 结构，并将 read 结构标记为废弃。
 - 写入完成后，如果满足某些条件（如 dirty 结构中的条目数量达到一定阈值），会将 dirty 结构的内容复制到新的 read 结构中，以提高后续读取操作的效率。
 
+## sync.Map 和加锁的区别是什么？
+- sync.Map 和使用锁的区别在于，sync.Map 不需要在并发访问时进行加锁和解锁操作。相比之下，使用锁需要在并发访问时显式地加锁和解锁，以避免竞争条件和数据竞争问题。
+- 在使用锁时，当多个 goroutine 同时访问同一块数据时，必须通过加锁来避免竞争条件。这意味着只有一个 goroutine 能够访问该数据，并且在该 goroutine 完成工作后，其他 goroutine 才能够访问数据。这种方式可以确保数据的一致性，但是加锁会带来额外的开销，并且在高并发情况下可能会影响性能。
+相比之下，sync.Map 使用了更高级的算法来避免竞争条件和数据竞争问题，而不需要显式地进行加锁和解锁。当多个 goroutine 同时访问 sync.Map 时，它会自动分配不同的段来存储数据，并且每个段都有自己的读写锁，以避免竞争条件。这种方式可以提高并发性能，减少开销，并且避免死锁等问题。
+ - 因此，当需要在并发访问时安全地共享数据时，可以考虑使用 sync.Map 来避免竞争条件和数据竞争问题，并提高性能。而当需要在使用锁时，需要显式地加锁和解锁来保证数据一致性和避免竞争条件。
+
+
 ## Go map中删除一个key的内存是否会立即释放？
 - 内存释放：当你删除一个 key 时，该 key 及其对应的值将不再可访问，但这并不意味着相关的内存会立即被释放。Go 语言使用垃圾回收（GC）机制来管理内存。
 - 垃圾回收：删除 key 后，如果没有其他引用指向该值，垃圾回收器会在未来的某个时间点释放这部分内存。具体的释放时间由 Go 的垃圾回收算法决定，并不是即时的。
@@ -242,17 +249,77 @@ func main() {
 - - 重新分配：如果在函数内部对 slice 进行重新分配（例如使用 append 函数），可能会导致原始 slice 不被修改，因为此时可能会创建一个新的底层数组。
 
 ## Go读写锁的概念？读的时候会影响别人的读么？读优先还是写优先？
-
-
-## sync.Map 和加锁的区别是什么？
-- sync.Map 和使用锁的区别在于，sync.Map 不需要在并发访问时进行加锁和解锁操作。相比之下，使用锁需要在并发访问时显式地加锁和解锁，以避免竞争条件和数据竞争问题。
-- 在使用锁时，当多个 goroutine 同时访问同一块数据时，必须通过加锁来避免竞争条件。这意味着只有一个 goroutine 能够访问该数据，并且在该 goroutine 完成工作后，其他 goroutine 才能够访问数据。这种方式可以确保数据的一致性，但是加锁会带来额外的开销，并且在高并发情况下可能会影响性能。
-相比之下，sync.Map 使用了更高级的算法来避免竞争条件和数据竞争问题，而不需要显式地进行加锁和解锁。当多个 goroutine 同时访问 sync.Map 时，它会自动分配不同的段来存储数据，并且每个段都有自己的读写锁，以避免竞争条件。这种方式可以提高并发性能，减少开销，并且避免死锁等问题。
- - 因此，当需要在并发访问时安全地共享数据时，可以考虑使用 sync.Map 来避免竞争条件和数据竞争问题，并提高性能。而当需要在使用锁时，需要显式地加锁和解锁来保证数据一致性和避免竞争条件。
-
+- 读写锁 允许多个 Goroutine 同时读取，但在写入时会阻止所有的读和写操作。
+- 读操作不会影响其他读操作，而写操作会阻塞所有的读操作。
+- Go 的 sync.RWMutex 是读优先的，但可以通过其他方式实现写优先的行为。
 
 ## context的应用场景？
+- 控制 Goroutines 的生命周期
+``` golang
+ctx, cancel := context.WithCancel(context.Background())
+go func() {
+    // 监听某个条件
+    // 如果需要取消
+    cancel()
+}()
+```
+- 设置超时和截止时间
+``` golang
+ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+defer cancel()
 
+// 执行可能超时的操作
+select {
+case result := <-someOperation(ctx):
+    // 处理结果
+case <-ctx.Done():
+    // 超时处理
+}
+```
+
+- 传递请求范围的值
+```golang
+ctx := context.WithValue(context.Background(), "userID", userID)
+
+// 在处理请求的其他部分中获取 userID
+userID := ctx.Value("userID").(string)
+```
+
+- 处理并发操作
+```golang
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+var wg sync.WaitGroup
+for i := 0; i < 5; i++ {
+    wg.Add(1)
+    go func(id int) {
+        defer wg.Done()
+        select {
+        case <-ctx.Done():
+            // 处理取消
+            return
+        default:
+            // 执行任务
+        }
+    }(i)
+}
+wg.Wait()
+```
+- HTTP 请求的上下文管理
+```golang 
+http.HandleFunc("/example", func(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    
+    // 模拟长时间运行的操作
+    select {
+    case <-time.After(5 * time.Second):
+        fmt.Fprintln(w, "Request completed")
+    case <-ctx.Done():
+        http.Error(w, ctx.Err().Error(), http.StatusRequestTimeout)
+    }
+})
+```
 ## select的作用？项目中怎么使用的？
 ## 数组和切片的区别
 ## Go数据类型有哪些？
