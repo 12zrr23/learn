@@ -12,6 +12,8 @@
 - - 对于 map: make(map[K]V, cap)
 - - 对于 channel: make(chan T, buffer)
 
+
+
 ## Go语言中的panic和recover有什么作用？
 1. panic和recover是Go语言中用于处理异常的机制。
 2. 当程序遇到无法处理的错误时，可以使用panic引发一个异常，中断程序的正常执行。
@@ -86,3 +88,167 @@ m[fmt.Sprintf("key%d", id)] = id
 6. slice、map 和 channel:
 -	这些复合数据类型的底层实现通常需要在堆上分配内存,因此它们的元素也会逃逸
 
+## 讲一下gc
+- 定义：垃圾回收是一种自动内存管理机制，它负责识别和释放不再使用的内存，从而避免内存泄漏。
+重要性：在 Go 中，GC 是自动进行的，这减少了程序员手动管理内存的工作量，降低了出错的可能性。
+- Go 的 GC 特点
+1. 三色标记算法：Go 使用三色标记法来进行垃圾收集。这个过程分为白色、灰色和黑色对象，通过追踪引用关系来确定哪些对象仍然活跃。
+2. 并发执行：Go 的 GC 是并发的，意味着垃圾收集可以在程序运行时进行，尽量减少停顿时间（STW, Stop-The-World），提高应用程序的响应性。
+3. 非分代收集：与 Java 等语言不同，Go 的 GC 不是基于分代的。所有对象都在同一个堆中处理，这样可以简化垃圾收集逻辑，但可能会增加一些开销。
+4. 非紧缩：Go 的 GC 不会移动存活的对象，而是使用指针更新来清理死对象的空间。这种方法避免了因移动对象而导致的额外开销。
+5. 混合写屏障：为了支持并发标记，Go 引入了混合写屏障技术，它可以追踪在标记过程中发生的指针更新，确保不会遗漏任何存活的对象。
+6. 触发时机: 基于分配速度：GC 通常会在程序分配了一定量的新内存后触发。这个阈值会根据上一次 GC 后剩余的堆大小动态调整。
+7. 显式调用：开发者也可以通过 runtime.GC() 显式地触发一次 GC，但这在大多数情况下并不推荐，因为自动 GC 已经很高效。
+8. 性能优化:降低 STW 时间：Go 团队一直在努力减少 GC 的停顿时间，以提供更好的用户体验。
+9. 可配置参数：可以通过设置 GOGC 环境变量或使用 debug.SetGCPercent 函数来调整 GC 的行为，比如设置堆增长的比例。
+
+## 说一下slice的扩容机制
+- 切片的扩容机制是这样的：
+
+1. 初始分配：使用 make 函数创建一个切片时，可以指定长度和容量。如果没有指定容量，Go 会根据长度自动选择一个合适的容量。
+
+2. 容量不足时的处理：当使用 append 函数向切片追加元素时，如果当前容量不足以容纳新元素，Go 会创建一个新的更大的底层数组。扩容的具体规则如下：
+
+3. 如果旧容量小于 256：新容量 = 旧容量 * 2。
+4. 如果旧容量大于等于 256：新容量 = 旧容量 + （3 * 256 + 旧容量）/ 4。
+5. 数据迁移：将旧数组中的所有元素复制到新数组中，并更新切片的底层数组指针，使其指向新数组。
+6. 继续操作：在新数组上继续进行追加或其他操作
+
+## 标准 map 的并发安全性
+非并发安全：标准 map 在多 goroutine 环境下不保证线程安全。如果需要在并发环境中使用 map，必须自己实现同步机制，例如使用 sync.Mutex 或 sync.RWMutex 来保护 map 的访问。
+
+## sync.Map 的底层实现
+
+1. 结构体定义：
+- sync.Map 内部包含两个主要部分：一个用于读取的 read 结构和一个用于写入的 dirty 结构。
+2. read 结构：
+- read 结构主要用于读取操作，它包含一个指针数组 m 和一个计数器 count。
+- m 数组存储键值对。
+- count 记录当前 read 结构中的条目数量。
+- 如果 count 为负数，表示正在进行写入操作或 read 结构已经被废弃。
+3. dirty 结构：
+- dirty 结构用于写入操作，它包含一个带锁的 map 和一个删除集合 misses。
+- map 存储实际的键值对。
+- misses 用于记录那些在 read 结构中被删除但在 dirty 结构中还未删除的键。
+4. 读取操作：
+- 读取操作首先尝试从 read 结构中获取数据。
+- 如果 read 结构中的 count 为负数或没有找到键，则会切换到 dirty 结构进行查找。
+5. 写入操作：
+- 写入操作总是通过 dirty 结构进行。
+- 如果 dirty 结构不存在，则创建一个新的 dirty 结构，并将 read 结构标记为废弃。
+- 写入完成后，如果满足某些条件（如 dirty 结构中的条目数量达到一定阈值），会将 dirty 结构的内容复制到新的 read 结构中，以提高后续读取操作的效率。
+
+## Go map中删除一个key的内存是否会立即释放？
+- 内存释放：当你删除一个 key 时，该 key 及其对应的值将不再可访问，但这并不意味着相关的内存会立即被释放。Go 语言使用垃圾回收（GC）机制来管理内存。
+- 垃圾回收：删除 key 后，如果没有其他引用指向该值，垃圾回收器会在未来的某个时间点释放这部分内存。具体的释放时间由 Go 的垃圾回收算法决定，并不是即时的。
+
+
+## GMP模型？
+1.  G (Goroutines)：
+- Goroutine 是 Go 语言中的轻量级线程，可以在同一地址空间中并发运行。创建 Goroutine 只需使用 go 关键字。
+- Goroutines 的调度是由 Go 运行时（Go runtime）管理的，允许数以万计的 Goroutine 并发运行。
+2. M (Machine)：
+- Machine 通常指的是操作系统线程。Go 运行时使用 M 来表示与操作系统线程相关的结构，负责执行 Goroutine。
+- 每个 M 线程可以执行一个或多个 Goroutine。
+3. P (Processor)：
+- Processor 是 Go 运行时的一个抽象，表示一个逻辑处理器。它维护一个本地队列，用于存放待执行的 Goroutine。
+- P 的数量通常与机器的核心数相关。Go 运行时会根据可用的 CPU 核心数来调整 P 的数量。
+
+4. Goroutine 调度：
+- 当创建一个新的 Goroutine 时，它会被分配到某个 P 的队列中。
+- 运行时会根据 Goroutine 的状态和 P 的负载情况来调度 Goroutine 的执行。
+5. G、M 和 P 的关系：
+- 每个 Goroutine 由 M 执行，M 可能会在 P 上运行。
+- P 充当了 Goroutine 的调度器，管理其执行队列。M 可以在不同的 P 之间切换，以便更好地利用 CPU 资源。
+
+
+## Golang如何优雅关闭一个channel？
+
+1. 只由一个发送者关闭：
+通常，只有创建该 channel 的 Goroutine 应该负责关闭它。这可以避免多个 Goroutine 同时关闭同一个 channel 导致的运行时错误。
+2. 使用 defer 关闭 channel
+3. 使用 for 循环和 ok 变量
+- 在接收数据时，使用 for 循环和 ok 变量来判断 channel 是否已经关闭：
+```golang
+func main() {
+    ch := make(chan int)
+
+    go func() {
+        for i := 0; i < 5; i++ {
+            ch <- i
+        }
+        close(ch) // 关闭 channel
+    }()
+
+    for {
+        if v, ok := <-ch; ok {
+            fmt.Println(v)
+        } else {
+            // channel 已关闭，退出循环
+            break
+        }
+    }
+}
+```
+4. 使用 WaitGroup 确保所有 Goroutine 完成
+- 在多个 Goroutine 的情况下，使用 sync.WaitGroup 来确保所有 Goroutine 完成后再关闭 channel：
+```golang
+package main
+
+import (
+    "fmt"
+    "sync"
+)
+
+func main() {
+    ch := make(chan int)
+    var wg sync.WaitGroup
+
+    // 启动多个 Goroutine
+    for i := 0; i < 3; i++ {
+        wg.Add(1)
+        go func(i int) {
+            defer wg.Done()
+            for j := 0; j < 2; j++ {
+                ch <- i*10 + j
+            }
+        }(i)
+    }
+
+    // 启动一个 Goroutine 关闭 channel
+    go func() {
+        wg.Wait() // 等待所有 Goroutine 完成
+        close(ch) // 关闭 channel
+    }()
+
+    // 接收数据
+    for v := range ch {
+        fmt.Println(v)
+    }
+}
+```
+5. 处理关闭后的发送
+- 在关闭 channel 后，任何发送操作都会引发运行时错误。因此，确保逻辑上不再向已关闭的 channel 发送数据
+
+## slice是引用传递还是值传递？slice 参数传递过去，修改之后，外部变量是否也会被修改？
+
+
+## Go读写锁的概念？读的时候会影响别人的读么？读优先还是写优先？
+## context的应用场景？
+## select的作用？项目中怎么使用的？
+## 数组和切片的区别
+## Go数据类型有哪些？
+## 如何判断两个interface{}相等？
+
+## init()方法的特性
+## switch-case语句，强制执行下一个case
+## encoding/json 包解码通过 HTTP 请求接收的 JSON 数据时，它会默认将所有数字解析为 float64 类型
+## Go里面的类型断言？
+## Go静态类型声明？
+## sync包使用？
+## gin的并发请求、错误处理、路由处理
+## CSP并发模型
+## 对关闭的channel写为什么会panic？
+## 字符串转byte数组会发生内存拷贝么？为什么？
+## 如何实现字符串转切片无内存拷贝（unsafe）？
+## Go语言channel的特性？channel阻塞信息是怎么处理的？channel底层实现？
