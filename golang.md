@@ -454,9 +454,73 @@ i = "Go编程时光"
 - sync.Once：确保某个操作只执行一次。
 - sync.Cond：条件变量，允许 Goroutine 等待特定条件。
 - sync.Map : 线程安全的map
+
 ## gin的并发请求、错误处理、路由处理
+1. Gin 会为每个请求创建一个新的 Goroutine，从而实现并发处理。
+2. 在 Gin 中，可以通过中间件和上下文（*gin.Context）进行错误处理。
+3. 支持简单路由、参数化路由和路由组，便于组织和管理。
+```golang
+package main
+
+import (
+    "github.com/gin-gonic/gin"
+    "net/http"
+)
+
+func Recovery() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        defer func() {
+            if err := recover(); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+                c.Abort()
+            }
+        }()
+        c.Next()
+    }
+}
+
+func main() {
+    r := gin.Default()
+    r.Use(Recovery())
+
+    // 简单路由
+    r.GET("/ping", func(c *gin.Context) {
+        c.JSON(http.StatusOK, gin.H{"message": "pong"})
+    })
+
+    // 参数化路由
+    r.GET("/users/:id", func(c *gin.Context) {
+        id := c.Param("id")
+        c.JSON(http.StatusOK, gin.H{"user_id": id})
+    })
+
+    // 错误处理用例
+    r.GET("/divide", func(c *gin.Context) {
+        a := c.Query("a")
+        b := c.Query("b")
+
+        // 简单的错误处理
+        if b == "0" {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "division by zero"})
+            return
+        }
+
+        // 处理逻辑
+        // ...
+    })
+
+    r.Run() // 启动服务，默认监听 :8080
+}
+```
+
 ## CSP并发模型
 ## 对关闭的channel写为什么会panic？
+1. 读已经关闭的chan能一直读到东西，但是读到的内容根据通道内关闭前是否有元素而不同。
+- 如果chan关闭前，buffer内有元素还未读,会正确读到chan内的值，且返回的第二个bool值（是否读成功）为true。
+- 如果chan关闭前，buffer内有元素已经被读完，chan内无值，接下来所有接收的值都会非阻塞直接成功，返回 channel 元素的零值，但是第二个bool值一直为false。
+2. 写已经关闭的chan会panic
+- 理由：![alt text](image.png)源码直接是panic
+
 ## 字符串转byte数组会发生内存拷贝么？为什么？
 ## 如何实现字符串转切片无内存拷贝（unsafe）？
 ## Go语言channel的特性？channel阻塞信息是怎么处理的？channel底层实现？
