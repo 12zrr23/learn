@@ -522,6 +522,53 @@ func main() {
 - 理由：![alt text](image.png)源码直接是panic
 
 ## 字符串转byte数组会发生内存拷贝么？为什么？
+1. 字符串与字节数组的区别
+- 字符串：字符串在 Go 中是不可变的，一旦创建就不能修改。它是一个包含字符的序列，通常使用 UTF-8 编码。
+- 字节数组：字节数组（[]byte）是可变的，允许对其内容进行修改。
+2. 转换过程
+- 在将字符串转换为字节数组时，Go 会创建一个新的字节数组，并将字符串的内容复制到这个数组中。这是因为：
+- - 不可变性：字符串的不可变性要求不能直接修改字符串的内容。因此需要创建新的字节数组来存储该内容。
+- - 内存管理：字符串和字节数组在内存中的管理方式不同，直接引用可能会导致数据不一致。
+
 ## 如何实现字符串转切片无内存拷贝（unsafe）？
+- 标准的转换方法都会发生内存拷贝，所以为了减少内存拷贝和内存申请我们可以使用强转换的方式对两者进行转换。在标准库中有对这两种方法实现：
+```golang
+// runtime/string.go
+func slicebytetostringtmp(ptr *byte, n int) (str string) {
+ stringStructOf(&str).str = unsafe.Pointer(ptr)
+ stringStructOf(&str).len = n
+ return
+}
+
+func stringtoslicebytetmp(s string) []byte {
+    str := (*stringStruct)(unsafe.Pointer(&s))
+    ret := slice{array: unsafe.Pointer(str.str), len: str.len, cap: str.len}
+    return *(*[]byte)(unsafe.Pointer(&ret))
+}
+```
 ## Go语言channel的特性？channel阻塞信息是怎么处理的？channel底层实现？
+首先，我们来了解下如何使用Go语言的Channel。一个Channel可以被视为一个管道，用于连接发送者（发送数据的协程）和接收者（接收数据的协程）。要创建一个Channel，我们使用内置的make函数，例如：ch := make(chan int)。
+然后，我们可以通过发送操作将数据发送到Channel中，例如：channel <- data。同样地，我们可以从Channel中接收数据，例如：data := <- channel。值得注意的是，发送和接收操作是阻塞的，这意味着如果Channel为空，接收操作将会阻塞直到有数据可用；反之，如果Channel已满，发送操作将会阻塞直到有空间可用。
+接下来，我们将深入探讨Channel的底层原理。在Go语言的并发模型中，每个Channel都有一个与之关联的固定长度的环形队列。这个队列用于暂存发送和接收操作的数据。当一个协程尝试向Channel写入数据时，如果队列已满，该协程将会被阻塞，直到队列中有空间可用。同样地，当一个协程尝试从Channel读取数据时，如果队列为空，该协程将会被阻塞，直到队列中有数据可用。
+
+```golang
+type hchan struct {
+	qcount   uint           // 缓冲区中元素的数量
+	dataqsiz uint           // 缓冲区的大小
+	buf      unsafe.Pointer // 缓冲区指针
+	elemsize uint16         // 每个元素的大小
+	closed   uint32         // 是否已关闭
+	sendx    uint           // 发送索引
+	recvx    uint           // 接收索引
+	recvq    waitq          // 等待接收的 goroutine 队列
+	sendq    waitq          // 等待发送的 goroutine 队列
+	lock     mutex          // 锁
+}
+```
 ## Go的反射原理
+Golang反射是通过接口来实现的，通过隐式转换，普通的类型被转换成interface类型，这个过程涉及到类型转换的过程，首先从Golang类型转为interface类型, 再从interface类型转换成反射类型, 再从反射类型得到想的类型和值的信息.
+
+- 反射的应用场景
+序列化和反序列化：例如 JSON 编码和解码，通常使用反射来动态访问结构体字段。
+ORM 框架：在数据库映射中，使用反射来动态访问对象属性。
+测试框架：在单元测试中，动态创建和检查对象的状态。
