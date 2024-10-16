@@ -519,7 +519,7 @@ func main() {
 - 如果chan关闭前，buffer内有元素还未读,会正确读到chan内的值，且返回的第二个bool值（是否读成功）为true。
 - 如果chan关闭前，buffer内有元素已经被读完，chan内无值，接下来所有接收的值都会非阻塞直接成功，返回 channel 元素的零值，但是第二个bool值一直为false。
 2. 写已经关闭的chan会panic
-- 理由：![alt text](picture/image.png)源码直接是panic
+- 理由：![alt text](..\picture\image.png)源码直接是panic
 
 ## 字符串转byte数组会发生内存拷贝么？为什么？
 1. 字符串与字节数组的区别
