@@ -630,3 +630,51 @@ Golang反射是通过接口来实现的，通过隐式转换，普通的类型�
 序列化和反序列化：例如 JSON 编码和解码，通常使用反射来动态访问结构体字段。
 ORM 框架：在数据库映射中，使用反射来动态访问对象属性。
 测试框架：在单元测试中，动态创建和检查对象的状态。
+
+
+## gorm框架的使用
+```golang
+package main
+
+import (
+    "gorm.io/driver/mysql"
+    "gorm.io/gorm"
+    "log"
+    "time"
+)
+
+type User struct {
+    ID        uint      `gorm:"primaryKey"`
+    Name      string    `gorm:"size:100"`
+    Email     string    `gorm:"unique"`
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+
+func main() {
+    dsn := "user:password@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
+    db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+    if err != nil {
+        log.Fatal("failed to connect to database:", err)
+    }
+
+    // 数据库迁移
+    db.AutoMigrate(&User{})
+
+    // 创建用户
+    db.Create(&User{Name: "Alice", Email: "alice@example.com"})
+
+    // 查询用户
+    var user User
+    db.First(&user, 1)
+    log.Println("User:", user)
+
+    // 更新用户
+    user.Name = "Alice Updated"
+    db.Save(&user)
+
+    // 删除用户
+    db.Delete(&user, user.ID)
+}
+```
+
