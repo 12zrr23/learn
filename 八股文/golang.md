@@ -678,3 +678,88 @@ func main() {
 }
 ```
 
+## JSON的使用(序列化与反序列化)
+### 序列化：
+```golang
+
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+type Book struct {
+	Name 		string
+	Author		string
+	PublishTime	time.Time
+}
+
+func main() {
+	bookObj := &Book{
+		Name:        "Go 语言基础入门",
+		Author:      "fxtack",
+		PublishTime: time.Now(),
+	}
+	
+	// 注意 json.MarshalIndent 的参数多了两个
+	jsonBytes, _ := json.MarshalIndent(bookObj, "", "\t")
+	fmt.Println(string(jsonBytes))
+}
+
+```
+输出如下：
+```golang
+{
+	"Name": "Go 语言基础入门",
+	"Author": "fxtack",
+	"PublishTime": "2021-07-03T19:07:19.8107909+08:00"
+}
+
+```
+
+### 反序列化
+```golang
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+type Book struct {
+	// 注意，使用了 json 标签，则 JSON 内容的字段名必须与 json 标签的值一致才能被解析
+	Name 		string		`json:"name"`
+	Author		string		`json:"author"`
+	PublishTime	time.Time	`json:"publishTime"`
+}
+
+func main() {
+
+	// 序列化示例中得到的 JSON 字符串
+	jsonStr := "{\"name\":\"Go 语言基础入门\",\"author\":\"fxtack\",\"publishTime\":" +
+		"\"2021-07-03T19:00:04.1716455+08:00\"}"
+
+	// 声明一个空的 book 来接受结果
+	var bookObj Book
+	
+	// 注意！反序列化函数 json.Unmarshal 的参数一个是 JSON 字符串的字节切片
+	// 一个是用于接受反序列化结果的对象引用。或者说传入的对象必须是可寻址的
+	json.Unmarshal([]byte(jsonStr), &bookObj)
+	fmt.Printf("书名为 《%s》, 作者是 %s, 发布时间为 %s",bookObj.Name, bookObj.Author, bookObj.PublishTime)
+}
+```
+输出如下：
+```golang
+书名为 《Go 语言基础入门》, 作者是 fxtack, 发布时间为 2021-07-03 19:00:04.1716455 +0800 CST m=+0.000000001
+```
+
+
+## goalng程序运行时有多少个线程
+在 Go 语言中，程序运行时的线程数取决于多个因素，包括：
+1. Goroutine 数量：Go 使用 goroutines 来实现并发，goroutines 是轻量级的线程。每个 goroutine 会在一个或多个系统线程上运行。
+2. 运行时调度：Go 的运行时环境会根据系统的 CPU 核心数和 goroutines 的数量来动态调整使用的系统线程。Go 的调度器会在多个 goroutine 之间分配系统线程。
+3. 系统资源：操作系统的线程池大小和其他资源限制也会影响可用线程数量。
+通常来说，Go 程序的实际线程数可以通过 runtime.NumGoroutine() 函数来获取当前正在运行的 goroutines 数量，但实际的系统线程数可能会更少，因为多个 goroutines 可以在同一个线程上运行
