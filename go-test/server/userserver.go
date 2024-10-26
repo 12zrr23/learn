@@ -5,5 +5,5 @@ import (
 )
 
 func CreateUser(c *gin.Context) {
-
+	
 }

@@ -3,7 +3,7 @@ package models
 import (
 	"fmt"
 	"test/sql"
-	"time"
+	//"time"
 
 	"gorm.io/gorm"
 )
@@ -14,8 +14,8 @@ type UserBasic struct {
 	Password   string
 	Email      string
 	Phone      string
-	CreateTime time.Time
-	UpdateTime time.Time
+	//CreateTime time.Time
+	//UpdateTime time.Time
 }
 
 func (table *UserBasic) TableName() string {

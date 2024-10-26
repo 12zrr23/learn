@@ -763,3 +763,63 @@ func main() {
 2. 运行时调度：Go 的运行时环境会根据系统的 CPU 核心数和 goroutines 的数量来动态调整使用的系统线程。Go 的调度器会在多个 goroutine 之间分配系统线程。
 3. 系统资源：操作系统的线程池大小和其他资源限制也会影响可用线程数量。
 通常来说，Go 程序的实际线程数可以通过 runtime.NumGoroutine() 函数来获取当前正在运行的 goroutines 数量，但实际的系统线程数可能会更少，因为多个 goroutines 可以在同一个线程上运行
+
+## golang如何避免内存泄漏
+1. 使用 defer 释放资源
+在使用网络连接、文件或其他资源时，确保在函数返回时使用 defer 语句释放资源。
+```golang
+func readFile(filename string) {
+    file, err := os.Open(filename)
+    if err != nil {
+        // 处理错误
+        return
+    }
+    defer file.Close() // 确保在函数结束时关闭文件
+    // 进行文件操作
+}
+```
+2. 避免长时间持有引用
+尽量避免长时间持有对大对象的引用，特别是在不再需要时。
+
+3. 使用 sync.Pool
+sync.Pool 可以用来缓存临时对象，减少内存分配和垃圾回收的开销
+```golang
+var pool = &sync.Pool{
+    New: func() interface{} {
+        return new(MyType)
+    },
+}
+
+func useObject() {
+    obj := pool.Get().(*MyType)
+    defer pool.Put(obj) // 使用后放回池中
+    // 使用 obj
+}
+```
+4. 注意 goroutine 的使用
+确保启动的 goroutine 在不再需要时能够正常退出，避免泄漏。
+```golang
+func worker(done chan bool) {
+    // 执行任务
+    done <- true // 通知任务完成
+}
+
+func main() {
+    done := make(chan bool)
+    go worker(done)
+    <-done // 等待任务完成
+}
+```
+5. 使用工具检测内存泄漏
+使用 Go 的内置工具（如 pprof 和 go test -bench）来检测内存使用情况，帮助识别潜在的内存泄漏。
+```golang
+go test -bench . -benchmem
+go tool pprof path/to/binary
+```
+6. 避免循环引用
+在使用指针时，避免循环引用，特别是在使用结构体和接口时。确保所有引用都能被垃圾回收器识别为可回收。
+
+7. 合理使用切片和映射
+在使用切片和映射时，注意它们的容量和长度，避免不必要的内存分配。
+8. 及时清理不再使用的对象
+在需要的地方，确保及时清理不再使用的对象，尤其在长时间运行的程序中。
